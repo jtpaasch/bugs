@@ -1,0 +1,100 @@
+#!venv/bin/python
+
+import sys
+import tornado.httpclient
+import tornado.ioloop
+
+
+class Bugs:
+    """
+    A class that can run a bunch of HTTP requests.
+
+    """
+
+    # A reference to a tornado IO Loop instance.
+    ioloop = None
+
+    # A reference to a tornado AsyncHTTPClient.
+    client = None
+
+    def __init__(self, ioloop, client):
+        """
+        This runs when the class is instantiated.
+
+        """
+
+        self.ioloop = ioloop
+        self.client = client
+
+    @property
+    def active(self):
+        """
+        Is the client still active? 
+
+        """
+
+        return len(self.client.active) != 0
+
+    def crawl(self, url):
+        """
+        Fetch the specified URL.
+
+        """
+
+        self.client.fetch(url, self.on_response)
+
+    def on_response(self, response):
+        """
+        This fires when the HTTP request returns a response.
+
+        """
+
+        # If there's an error, print it.
+        # Otherwise, output the response.
+        if response.error:
+            print "Error:", response.error
+        else:
+            print response.code, response.request.url
+
+        # If the client is no longer active, 
+        # we can stop the IO loop.
+        if not self.active:
+            self.ioloop.stop()
+
+def main():
+    """
+    The main entry point into the program.
+
+    """
+
+    # Get the command line arguments passed to this program.
+    arguments = sys.argv
+
+    # if no arguments, print a usage message. 
+    if len(arguments) < 2:
+        print "Usage: bugs url [url2] [url3] [...]"
+        exit(1)
+
+    # The urls will be everything after the first argument.
+    urls = arguments[1:]
+
+    # Get an instance of the IO loop.
+    ioloop = tornado.ioloop.IOLoop.instance()
+
+    # Instantiate an HTTP client.
+    client = tornado.httpclient.AsyncHTTPClient()
+
+    # Get a Bugs instance.
+    bugs = Bugs(ioloop, client)
+
+    # Crawl something.
+    for url in urls:
+        bugs.crawl(url)
+
+    # Start the IO loop.
+    ioloop.start()
+
+
+# Execute the main() function if this is not imported as a module.
+if __name__ == '__main__':
+    main()
