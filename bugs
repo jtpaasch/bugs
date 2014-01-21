@@ -1,11 +1,54 @@
 #!venv/bin/python
 
 import sys
-import tornado.httpclient
+import json
 import tornado.ioloop
+import tornado.gen
+import tornado.httpclient
+import tornado.web
 
 
-class Bugs:
+class Utilities:
+    """
+    A class with some basic utilities.
+
+    """
+
+    @staticmethod
+    def is_json(string):
+        """
+        Checks if the provided string is json.
+
+        """
+
+        try:
+            json_object = json.loads(string)
+        except ValueError:
+            return False
+        else:
+            return True
+
+    @staticmethod
+    def parse_json(string):
+        """
+        Loads a JSON string and returns a Python Object.
+
+        """
+
+        try:
+            json_object = json.loads(string)
+        except ValueError:
+            return None
+        else:
+            return json_object
+
+    @staticmethod
+    def parse_object_in_json(dictionary):
+        if 'buffer' in dictionary:
+            return '_io.BytesIO object'
+
+
+class Bugs():
     """
     A class that can run a bunch of HTTP requests.
 
@@ -35,13 +78,34 @@ class Bugs:
 
         return len(self.client.active) != 0
 
-    def crawl(self, url):
+    @tornado.gen.engine
+    def crawl(self, target):
         """
-        Fetch the specified URL.
+        Fetch the specified target.
 
         """
 
-        self.client.fetch(url, self.on_response)
+        # Is it JSON? Parse it and generate a request object with it.
+        if Utilities.is_json(target):
+            item = Utilities.parse_json(target)
+            url = item['url']
+            request = tornado.httpclient.HTTPRequest(**item)
+
+        # If not, assume it's just a url.
+        else:
+            request = tornado.httpclient.HTTPRequest(target)
+
+        # Fetch the item.
+        response = yield self.client.fetch(request)
+
+        # Process the response.
+        self.on_response(response)
+
+        # If the client is no longer active, 
+        # we can stop the IO loop.
+        if not self.active:
+            self.ioloop.stop()
+
 
     def on_response(self, response):
         """
@@ -50,16 +114,37 @@ class Bugs:
         """
 
         # If there's an error, print it.
-        # Otherwise, output the response.
         if response.error:
             print "Error:", response.error
-        else:
-            print response.code, response.request.url
 
-        # If the client is no longer active, 
-        # we can stop the IO loop.
-        if not self.active:
-            self.ioloop.stop()
+        # Otherwise, format the response and print it.
+        else:
+            print self.format_response(response)
+
+            
+    def format_response(self, response):
+        """
+        This formats the response object for output.
+
+        """
+
+        # Get all the values in the response.
+        values = response.__dict__
+
+        # Get the actual bytestream of the response.
+        stream = values['buffer'].getvalue()
+
+        # Get the original request object.
+        request = values['request']
+
+        # Overwrite some values.
+        values['buffer'] = len(stream)
+        values['request'] = (request.url, request.user_agent)
+
+        # Format as json.
+        output = json.dumps(values, indent=2)
+        return output
+
 
 def main():
     """
@@ -75,8 +160,9 @@ def main():
         print "Usage: bugs url [url2] [url3] [...]"
         exit(1)
 
-    # The urls will be everything after the first argument.
-    urls = arguments[1:]
+    # The targets we want to crawl are listed after 
+    # the first argument (the first argument is the program's name).
+    targets = arguments[1:]
 
     # Get an instance of the IO loop.
     ioloop = tornado.ioloop.IOLoop.instance()
@@ -87,9 +173,9 @@ def main():
     # Get a Bugs instance.
     bugs = Bugs(ioloop, client)
 
-    # Crawl something.
-    for url in urls:
-        bugs.crawl(url)
+    # Crawl each target.
+    for target in targets:
+        bugs.crawl(target)
 
     # Start the IO loop.
     ioloop.start()
