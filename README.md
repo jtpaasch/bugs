@@ -35,7 +35,7 @@ If you programatically generate your list of URLs or Requests and store them in 
     http://www.yahoo.com
     ...
 
-You can `cat that file, and pass it as arguments (using `xargs`) to the `bugs` script:
+You can `cat` that file, and pass it as arguments (using `xargs`) to the `bugs` script:
 
     $ cat test_urls.txt | xargs python bugs
 
